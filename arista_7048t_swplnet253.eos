@@ -1,0 +1,531 @@
+! Arista 7048T-A — EOS Configuration
+! Hostname: swplnet253
+! Role: VRRP SECONDARY (priority 100) — between 7050SX (master/110) and Cisco (backup/90)
+! Generated: 2026-04-08
+! Platform: Arista 7048T-A (48x 1GbE RJ45 Ethernet1-48, 4x 10GbE SFP+ Ethernet49-52)
+!
+! Topology:
+!   Ethernet1-2   : Port-Channel2 — 1GbE inter-switch trunk to Cisco 3750G (swplnet251)
+!   Ethernet4     : PT Backdoor (laptop/console access, all VLANs trunk)
+!   Ethernet17    : ESXi Infra 1GbE UPLink
+!   Ethernet21-22 : STR SAN MGMT 1G UPLinks (VLAN 10 access)
+!   Ethernet23    : R310 ESXi Server 1G UPLink
+!   Ethernet25    : BKP Server 1G UPLink (T710, VLAN 10 access)
+!   Ethernet29-38 : ESXi Infra 1GbE UPLinks
+!   Ethernet39-44 : OOB Interfaces (VLAN 2 access)
+!   Ethernet45    : TPLink PoE UPLink (dual-homed: also on Cisco Gi2/0/45 — STP active)
+!   Ethernet46    : Meraki UPLink — GWISOLNET3 (native 503, allows 100+503)
+!   Ethernet47-50 : available
+!   Ethernet51-52 : Port-Channel1 — 10GbE uplink to Arista 7050SX (swplnet252)
+!
+! NOT configured on this switch (vs Cisco):
+!   Ethernet2     : Back Door → moved to Eth4
+!   Ethernet20    : TV Wired LAN → stays on Cisco only
+!   Ethernet26-28 : WLAN AP UpLinks → stays on Cisco only
+!
+! VRRP Design:
+!   Arista 7050SX (swplnet252) = MASTER  (priority 110)
+!   Arista 7048T  (swplnet253) = SECONDARY (priority 100)  ← this switch
+!   Cisco  3750G  (swplnet251) = BACKUP  (priority 90)
+!   VIP     = .1 on each subnet
+!
+! IP Scheme:
+!   Large subnets (/23, /24): 7048T = .253, 7050SX = .252, Cisco = .251, VIP = .1
+!   Small subnets (/26-/29):  7048T = .4,   7050SX = .3,   Cisco = .2,   VIP = .1
+!   VLAN 501 (/29): 7048T = 10.100.201.5, 7050SX = 10.100.201.3, Cisco = 10.100.201.4, VIP = 10.100.201.2
+!
+! DHCP: Cisco (swplnet251) is the DHCP server. All SVIs relay to 10.100.100.251.
+! STP:  7050SX = root (4096), 7048T = secondary (8192), Cisco = tertiary (32768 default)
+!       TPLink (Eth45) dual-homed to this switch and Cisco — bpdufilter DISABLED so STP can block one path.
+!
+
+! ============================================================
+! GLOBAL
+! ============================================================
+
+hostname swplnet253
+ip domain-name nnt.com
+ip name-server 8.8.8.8
+ip name-server 209.18.47.61
+ip name-server 209.18.47.62
+ip routing
+
+ntp server pool.ntp.org
+
+clock timezone US/Eastern
+
+snmp-server location "Home Lab"
+snmp-server contact "Patrick Tchuitio"
+
+! Credentials intentionally excluded — set once manually, not managed by Ansible.
+! To reset: ssh to switch, configure terminal, username ptchuitio privilege 15 role network-admin secret <password>
+
+management ssh
+   no shutdown
+
+! ============================================================
+! VLANs
+! ============================================================
+
+vlan 2
+   name OOBNET
+vlan 3
+   name GUESTNET
+vlan 5
+   name HOMENET
+vlan 6
+   name HOUSEHOLDNET
+vlan 7
+   name TVNET
+vlan 9
+   name PRINTNET
+vlan 10
+   name INFRACORENET
+vlan 11
+   name SANISCSINET
+vlan 12
+   name STORVMNET
+vlan 14
+   name SECCAMNET
+vlan 17
+   name TESTNET
+vlan 100
+   name COREMGMTNET
+vlan 105
+   name CONFMGMTNET
+vlan 200
+   name NANONET
+vlan 254
+   name PLATFORMNET
+vlan 503
+   name GWISOLNET3
+
+! ============================================================
+! SVI (VLAN Interfaces) + VRRP
+! IP scheme: large=.253, small=.4, VLAN501=.5
+! VRRP priority 100 (between 7050SX=110 and Cisco=90)
+! DHCP relay → Cisco at 10.100.100.251
+! ============================================================
+
+interface Vlan2
+   description OOBNET
+   ip address 10.2.0.253/23
+   ip helper-address 10.100.100.251
+   vrrp 2 ip 10.2.0.1
+   vrrp 2 priority 100
+
+interface Vlan3
+   description GUESTNET
+   ! IP to be assigned
+
+interface Vlan5
+   description HOMENET
+   mtu 9214
+   ip address 10.100.5.4/27
+   ip helper-address 10.100.100.251
+   vrrp 5 ip 10.100.5.1
+   vrrp 5 priority 100
+
+interface Vlan6
+   description HOUSEHOLDNET
+   mtu 9214
+   ip address 10.100.6.4/26
+   ip helper-address 10.100.100.251
+   vrrp 6 ip 10.100.6.1
+   vrrp 6 priority 100
+
+interface Vlan7
+   description TVNET
+   mtu 9214
+   ip address 10.100.7.4/28
+   ip helper-address 10.100.100.251
+   vrrp 7 ip 10.100.7.1
+   vrrp 7 priority 100
+
+interface Vlan9
+   description PRINTNET
+   mtu 9214
+   ip address 10.100.9.4/29
+   ip helper-address 10.100.100.251
+   vrrp 9 ip 10.100.9.1
+   vrrp 9 priority 100
+
+interface Vlan10
+   description INFRACORENET
+   mtu 9214
+   ip address 10.10.0.253/23
+   ip helper-address 10.100.100.251
+   vrrp 10 ip 10.10.0.1
+   vrrp 10 priority 100
+
+interface Vlan11
+   description SANISCSINET
+   mtu 9214
+   ip address 10.11.0.253/23
+   ip helper-address 10.100.100.251
+   vrrp 11 ip 10.11.0.1
+   vrrp 11 priority 100
+
+interface Vlan12
+   description STORVMNET
+   mtu 9214
+   ! Storage/vMotion only — no VRRP, no DHCP relay
+
+interface Vlan14
+   description SECCAMNET
+   mtu 9214
+   ip address 10.100.14.4/27
+   ip helper-address 10.100.100.251
+   vrrp 14 ip 10.100.14.1
+   vrrp 14 priority 100
+
+interface Vlan17
+   description TESTNET
+   mtu 9214
+   ip address 10.100.17.253/24
+   ip helper-address 10.100.100.251
+   vrrp 17 ip 10.100.17.1
+   vrrp 17 priority 100
+
+interface Vlan100
+   description COREMGMTNET
+   ip address 10.100.100.253/24
+   vrrp 100 ip 10.100.100.1
+   vrrp 100 priority 100
+
+interface Vlan105
+   description CONFMGMTNET
+   mtu 9214
+   ip address 10.100.105.253/24
+   ip helper-address 10.100.100.251
+   vrrp 105 ip 10.100.105.1
+   vrrp 105 priority 100
+
+interface Vlan200
+   description NANONET
+   mtu 9214
+   ip address 10.100.200.253/24
+   ip helper-address 10.100.100.251
+   vrrp 200 ip 10.100.200.1
+   vrrp 200 priority 100
+
+interface Vlan254
+   description PLATFORMNET
+   mtu 9214
+   ip address 10.100.254.253/24
+   ip helper-address 10.100.100.251
+   vrrp 254 ip 10.100.254.1
+   vrrp 254 priority 100
+
+interface Vlan503
+   description GWISOLNET3
+   ip address 10.100.203.3/29
+   vrrp 203 ip 10.100.203.2
+   vrrp 203 priority 100
+
+! ============================================================
+! DEFAULT ROUTE
+! ============================================================
+
+ip route 0.0.0.0/0 10.100.100.254 253
+
+! ============================================================
+! PORT-CHANNEL LOAD BALANCING
+! ============================================================
+
+! port-channel load-balance: not user-configurable on EOS 4.12 / petraA ASIC.
+! Switch defaults to src+dst IP hashing — confirmed via "show port-channel load-balance petraA fields".
+
+! ============================================================
+! PORT-CHANNELS
+! ============================================================
+
+interface Port-Channel1
+   description 7050SX_Core_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk native vlan 100
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+
+interface Port-Channel2
+   description Cisco_3750G_InterSwitch
+   mtu 9214
+   switchport mode trunk
+   switchport trunk native vlan 100
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+
+! ============================================================
+! PHYSICAL INTERFACES — SFP+ UPLINKS (10GbE DAC to 7050SX)
+! ============================================================
+
+interface Ethernet51
+   description 7050SX_Core_UPLink
+   mtu 9214
+   channel-group 1 mode active
+   spanning-tree portfast
+
+interface Ethernet52
+   description 7050SX_Core_UPLink
+   mtu 9214
+   channel-group 1 mode active
+   spanning-tree portfast
+
+! ============================================================
+! PHYSICAL INTERFACES — 1GbE (Inter-switch to Cisco)
+! ============================================================
+
+interface Ethernet1
+   description Cisco_3750G_InterSwitch
+   mtu 9214
+   channel-group 2 mode active
+   spanning-tree portfast
+
+interface Ethernet2
+   description Cisco_3750G_InterSwitch
+   mtu 9214
+   channel-group 2 mode active
+   spanning-tree portfast
+
+! Ethernet3: available
+
+interface Ethernet4
+   description PT_Backdoor
+   mtu 9214
+   switchport mode trunk
+   switchport trunk native vlan 100
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+! Ethernet5-16: available
+
+interface Ethernet17
+   description ESXi_Infra_1GbE_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+! Ethernet18-19: available
+! Ethernet20: NOT CONFIGURED — TV Wired LAN stays on Cisco only
+
+interface Ethernet21
+   description STR_SAN_MGMT_1G_UPLink
+   switchport mode access
+   switchport access vlan 10
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet22
+   description STR_SAN_MGMT_1G_UPLink
+   switchport mode access
+   switchport access vlan 10
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet23
+   description R310_ESXi_Server_1G_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk allowed vlan 7,10,17,100,105,200
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+! Ethernet24: available
+
+interface Ethernet25
+   description BKP_Server_1G_UPLink_T710
+   switchport mode access
+   switchport access vlan 10
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+! Ethernet26-28: NOT CONFIGURED — WLAN AP UpLinks stay on Cisco only
+
+interface Ethernet29
+   description ESXi_Infra_1GbE_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet30
+   description ESXi_Infra_1GbE_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet31
+   description ESXi_Infra_1GbE_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet32
+   description ESXi_Infra_1GbE_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet33
+   description ESXi_Infra_1GbE_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet34
+   description ESXi_Infra_1GbE_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet35
+   description ESXi_Infra_1GbE_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet36
+   description ESXi_Infra_1GbE_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet37
+   description ESXi_Infra_1GbE_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet38
+   description ESXi_Infra_1GbE_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet39
+   description OOB_Interface
+   switchport mode access
+   switchport access vlan 2
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet40
+   description OOB_Interface
+   switchport mode access
+   switchport access vlan 2
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet41
+   description OOB_Interface
+   switchport mode access
+   switchport access vlan 2
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet42
+   description OOB_Interface
+   switchport mode access
+   switchport access vlan 2
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet43
+   description OOB_Interface
+   switchport mode access
+   switchport access vlan 2
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet44
+   description OOB_Interface
+   switchport mode access
+   switchport access vlan 2
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet45
+   description TPLink_PoE_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk native vlan 100
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+   spanning-tree portfast
+   ! NOTE: bpdufilter intentionally ABSENT — TPLink is dual-homed to this switch AND Cisco Gi2/0/45
+   ! STP must run on this port to detect the loop and block the lower-priority path
+
+interface Ethernet46
+   description Meraki_UPLink_GWISOLNET3
+   mtu 9214
+   switchport mode trunk
+   switchport trunk native vlan 503
+   switchport trunk allowed vlan 100,503
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+! Ethernet47-50: available
+
+! ============================================================
+! SPANNING TREE
+! ============================================================
+
+spanning-tree mode rapid-pvst
+! spanning-tree priority not supported on EOS 4.12 — set manually if needed after EOS upgrade
+
+! ============================================================
+! MAC ADDRESS TABLE
+! ============================================================
+
+mac address-table aging-time 301
+
+! ============================================================
+! MANAGEMENT API
+! ============================================================
+
+management api http-commands
+   no shutdown
+   protocol https
+   no protocol http
+
+! ============================================================
+! END
+! ============================================================

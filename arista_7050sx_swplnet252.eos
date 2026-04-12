@@ -1,0 +1,439 @@
+! Arista 7050SX-64 — EOS Configuration
+! Translated from: dell_powerconnect_8024f.conf (swplnet005)
+! Generated: 2026-03-28
+! Updated: 2026-04-01 — HSRP replaced with VRRP (EOS 4.28.12M does not support HSRP)
+! Updated: 2026-04-04 — Hostname corrected, DHCP relay updated, secondary IPs removed
+! Updated: 2026-04-08 — STP priority 4096 (primary root), Port-Channel1 now connects to swplnet253
+! Hostname: swplnet252
+! Platform: Arista 7050SX-64 (48x 10GbE SFP+ Ethernet1-48, 4x 40GbE QSFP+ Ethernet49-52)
+!
+! Port mapping (Dell Te1/0/X → Arista EthernetX, 1:1):
+!   Port-Channel 1  : Ethernet47-48 (Core UPLink to 7048T-A swplnet253)
+!   Port-Channel 2  : Ethernet3-4   (ESXi Infra UPLinks)
+!   Port-Channel 3  : Ethernet5-6   (ESXi Infra UPLinks)
+!   Port-Channel 4  : Ethernet7-8   (ESXi Infra UPLinks)
+!   Port-Channel 5  : Ethernet9-10   (ESXi Infra UPLinks)
+!   Port-Channel 6  : Ethernet17-18 (Plex Server UPLinks)
+!
+! VRRP Design:
+!   Arista 7050SX = MASTER  (priority-level 110, preempt default) — all traffic flows here
+!   Arista 7048T-A = BACKUP (priority-level 90)              — failover only
+!   VIP     = .1 on each subnet                             — hosts use this as default gateway
+!   Group   = VLAN ID (or 201 for VLAN 501, since VRRP VRID max is 255)
+!   EOS syntax: vrrp X ipv4 <vip> / vrrp X priority-level <value>
+!   Preempt + 1s timers are RFC defaults — EOS does not store them in running-config
+!
+! IP Scheme:
+!   Large subnets (/23, /24): 7050SX = .252, 7048T-A = .251, VIP = .1
+!   Small subnets (/26, /27, /28, /29): 7050SX = .3, 7048T-A = .2, VIP = .1
+!
+! NOTE: Update all host/VM default gateways to .1 after validating failover.
+! NOTE: Passwords must be reset — Dell hashes are not compatible with EOS.
+! NOTE: iSCSI CoS (Dell: iscsi cos vpt 5) — configure via QoS policy if needed.
+! NOTE: DHCP relay moved from physical interfaces to SVIs (EOS standard).
+!
+
+! ============================================================
+! GLOBAL
+! ============================================================
+
+hostname swplnet252
+dns domain nnt.com
+ip name-server 8.8.8.8
+ip name-server 209.18.47.61
+ip name-server 209.18.47.62
+ip routing
+
+ntp server pool.ntp.org
+
+clock timezone US/Eastern
+
+snmp-server location "Home Lab"
+snmp-server contact "Patrick Tchuitio"
+
+! Credentials managed separately — not enforced by this baseline
+! Set via console or out-of-band; vault stores the runtime password for Ansible.
+
+management ssh
+   no shutdown
+
+! Arista-branded DACs — no unlock key needed
+! If using 3rd party optics, add: service unsupported-transceiver LabUse <key>
+
+! ============================================================
+! VLANs
+! ============================================================
+
+vlan 2
+   name OOBNET
+vlan 3
+   name GUESTNET
+vlan 5
+   name HOMENET
+vlan 6
+   name HOUSEHOLDNET
+vlan 7
+   name TVNET
+vlan 9
+   name PRINTNET
+vlan 10
+   name INFRACORENET
+vlan 11
+   name SANISCSINET
+vlan 12
+   name STORVMNET
+vlan 14
+   name SECCAMNET
+vlan 17
+   name TESTNET
+vlan 100
+   name COREMGMTNET
+vlan 105
+   name CONFMGMTNET
+vlan 200
+   name NANONET
+vlan 254
+   name PLATFORMNET
+vlan 502
+   name GWISOLNET2
+
+! ============================================================
+! SVI (VLAN Interfaces) + VRRP
+! ============================================================
+
+interface Vlan2
+   description OOBNET
+   ip address 10.2.0.252/23
+   ip helper-address 10.100.100.251
+   vrrp 2 ipv4 10.2.0.1
+   vrrp 2 priority-level 110
+
+interface Vlan3
+   description GUESTNET
+   ! IP to be assigned
+
+interface Vlan5
+   description HOMENET
+   mtu 9214
+   ip address 10.100.5.3/27
+   ip helper-address 10.100.100.251
+   vrrp 5 ipv4 10.100.5.1
+   vrrp 5 priority-level 110
+
+interface Vlan6
+   description HOUSEHOLDNET
+   mtu 9214
+   ip address 10.100.6.3/26
+   ip helper-address 10.100.100.251
+   vrrp 6 ipv4 10.100.6.1
+   vrrp 6 priority-level 110
+
+interface Vlan7
+   description TVNET
+   mtu 9214
+   ip address 10.100.7.3/28
+   ip helper-address 10.100.100.251
+   vrrp 7 ipv4 10.100.7.1
+   vrrp 7 priority-level 110
+
+interface Vlan9
+   description PRINTNET
+   mtu 9214
+   ip address 10.100.9.3/29
+   ip helper-address 10.100.100.251
+   vrrp 9 ipv4 10.100.9.1
+   vrrp 9 priority-level 110
+
+interface Vlan10
+   description INFRACORENET
+   mtu 9214
+   ip address 10.10.0.252/23
+   ip helper-address 10.100.100.251
+   vrrp 10 ipv4 10.10.0.1
+   vrrp 10 priority-level 110
+
+interface Vlan11
+   description SANISCSINET
+   mtu 9214
+   ip address 10.11.0.252/23
+   ip helper-address 10.100.100.251
+   vrrp 11 ipv4 10.11.0.1
+   vrrp 11 priority-level 110
+
+interface Vlan12
+   description STORVMNET
+   mtu 9214
+   ip address 10.12.0.252/23
+   ! Storage/vMotion only — no VRRP, no DHCP relay
+
+interface Vlan14
+   description SECCAMNET
+   ip address 10.100.14.3/27
+   ip helper-address 10.100.100.251
+   vrrp 14 ipv4 10.100.14.1
+   vrrp 14 priority-level 110
+
+interface Vlan17
+   description TESTNET
+   mtu 9214
+   ip address 10.100.17.252/24
+   ip helper-address 10.100.100.251
+   vrrp 17 ipv4 10.100.17.1
+   vrrp 17 priority-level 110
+
+interface Vlan100
+   description COREMGMTNET
+   ! Upstream router (Meraki) at .254. VRRP VIP = .1 (shared across both switches)
+   ip address 10.100.100.252/24
+   vrrp 100 ipv4 10.100.100.1
+   vrrp 100 priority-level 110
+
+interface Vlan105
+   description CONFMGMTNET
+   mtu 9214
+   ip address 10.100.105.252/24
+   ip helper-address 10.100.100.251
+   vrrp 105 ipv4 10.100.105.1
+   vrrp 105 priority-level 110
+
+interface Vlan200
+   description NANONET
+   mtu 9214
+   ip address 10.100.200.252/24
+   ip helper-address 10.100.100.251
+   vrrp 200 ipv4 10.100.200.1
+   vrrp 200 priority-level 110
+
+interface Vlan254
+   description PLATFORMNET
+   mtu 9214
+   ip address 10.100.254.252/24
+   ip helper-address 10.100.100.251
+   vrrp 254 ipv4 10.100.254.1
+   vrrp 254 priority-level 110
+
+interface Vlan502
+   description GWISOLNET2
+   ip address 10.100.202.4/29
+   vrrp 202 ipv4 10.100.202.2
+   vrrp 202 priority-level 110
+
+! ============================================================
+! DEFAULT ROUTE WITH HIGHEST ADMINISTRATIVE DISTANCE 253 (NO OSPF/BGP)
+! ============================================================
+
+ip route 0.0.0.0/0 10.100.100.254 253
+
+! ============================================================
+! PORT-CHANNEL LOAD BALANCING
+! ============================================================
+
+! port-channel load-balance: 7050SX uses Trident chip syntax — default hashing is sufficient
+! Do not configure explicitly; use 'port-channel load-balance trident fields' if needed
+
+! ============================================================
+! PORT-CHANNELS
+! ============================================================
+
+interface Port-Channel1
+   description Core_UPLink
+   mtu 9214
+   switchport mode trunk
+   switchport trunk native vlan 100
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+   spanning-tree portfast
+
+interface Port-Channel2
+   description ESXi_Infra_UPLinks
+   mtu 9214
+   switchport mode trunk
+   switchport trunk native vlan 1
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+interface Port-Channel3
+   description ESXi_Infra_UPLinks
+   mtu 9214
+   switchport mode trunk
+   switchport trunk native vlan 1
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+interface Port-Channel4
+   description ESXi_Infra_UPLinks
+   mtu 9214
+   switchport mode trunk
+   switchport trunk native vlan 1
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+interface Port-Channel5
+   description ESXi_Infra_UPLinks
+   mtu 9214
+   switchport mode trunk
+   switchport trunk native vlan 1
+   switchport trunk allowed vlan 2-3,5-7,9-12,14,17,100,105,200,254
+
+interface Port-Channel6
+   description Plex_Server_UPLinks
+   mtu 9214
+   switchport mode trunk
+   switchport trunk native vlan 7
+   switchport trunk allowed vlan 7
+   spanning-tree portfast
+
+! ============================================================
+! PHYSICAL INTERFACES
+! ============================================================
+
+interface Ethernet1
+   mtu 9214
+
+interface Ethernet2
+   mtu 9214
+
+interface Ethernet3
+   description ESXi_Infra_UPLinks
+   mtu 9214
+   channel-group 2 mode active
+   spanning-tree portfast
+
+interface Ethernet4
+   description ESXi_Infra_UPLinks
+   mtu 9214
+   channel-group 2 mode active
+   spanning-tree portfast
+
+interface Ethernet5
+   description ESXi_Infra_UPLinks
+   mtu 9214
+   channel-group 3 mode active
+   spanning-tree portfast
+
+interface Ethernet6
+   description ESXi_Infra_UPLinks
+   mtu 9214
+   channel-group 3 mode active
+   spanning-tree portfast
+
+interface Ethernet7
+   description ESXi_Infra_UPLinks
+   mtu 9214
+   channel-group 4 mode active
+   spanning-tree portfast
+
+interface Ethernet8
+   description ESXi_Infra_UPLinks
+   mtu 9214
+   channel-group 4 mode active
+   spanning-tree portfast
+
+interface Ethernet9
+   description ESXi_Infra_UPLinks
+   mtu 9214
+   channel-group 5 mode active
+   spanning-tree portfast
+
+interface Ethernet10
+   description ESXi_Infra_UPLinks
+   mtu 9214
+   channel-group 5 mode active
+   spanning-tree portfast
+
+interface Ethernet11
+   mtu 9214
+
+interface Ethernet12
+   mtu 9214
+
+interface Ethernet13
+   mtu 9214
+
+interface Ethernet14
+   mtu 9214
+
+interface Ethernet17
+   description Plex_Server_UPLinks
+   mtu 9214
+   channel-group 6 mode active
+   spanning-tree portfast
+
+interface Ethernet18
+   description Plex_Server_UPLinks
+   mtu 9214
+   channel-group 6 mode active
+   spanning-tree portfast
+
+interface Ethernet19
+   mtu 9214
+
+interface Ethernet20
+   mtu 9214
+
+interface Ethernet21
+   mtu 9214
+
+interface Ethernet22
+   mtu 9214
+
+interface Ethernet23
+   mtu 9214
+
+interface Ethernet24
+   mtu 9214
+
+! Ethernet25-44: available for new connections
+
+! Ethernet45: available
+
+interface Ethernet46
+   description Meraki_UPLink_GWISOLNET2
+   mtu 9214
+   switchport mode trunk
+   switchport trunk native vlan 502
+   switchport trunk allowed vlan 502
+   spanning-tree portfast
+   spanning-tree bpdufilter enable
+
+interface Ethernet47
+   description Core_UPLink
+   mtu 9214
+   channel-group 1 mode active
+   spanning-tree portfast
+
+interface Ethernet48
+   description Core_UPLink
+   mtu 9214
+   channel-group 1 mode active
+   spanning-tree portfast
+! Ethernet49-52: 40GbE QSFP+ — available for spine/router uplinks
+
+! ============================================================
+! DHCP SNOOPING
+! ============================================================
+
+ip dhcp snooping
+ip dhcp snooping vlan 2-3,5-7,9-10,14,17,100,105,200,254
+
+! ============================================================
+! SPANNING TREE
+! ============================================================
+
+spanning-tree mode rapid-pvst
+spanning-tree priority 4096
+
+! ============================================================
+! MAC ADDRESS TABLE
+! ============================================================
+
+mac address-table aging-time 301
+
+! ============================================================
+! MANAGEMENT API
+! ============================================================
+
+management api http-commands
+   no shutdown
+   no protocol https
+   protocol http
+
+! ============================================================
+! END
+! ============================================================

@@ -1,0 +1,754 @@
+! Cisco Catalyst 3750G — Updated Configuration
+! Hostname: swplnet251
+! Role: VRRP BACKUP (priority 90) + DHCP server + OOB access + AP/PoE uplinks
+! Generated: 2026-03-28
+! Updated: 2026-04-01 — HSRP replaced with VRRP
+! Updated: 2026-04-04 — Secondary IPs removed, Core UPLink moved to Gi2/0/51-52
+! Updated: 2026-04-08 — Added Port-Channel3 (inter-switch to 7048T swplnet253)
+!                        Gi2/0/1-2 repurposed as Port-Channel3 members
+!                        Back Door moved from Gi2/0/2 → Gi2/0/3
+!                        TPLink (Gi2/0/45) bpdufilter removed — dual-homed to 7048T, STP must run
+!                        STP priority explicitly set to 32768 (tertiary behind 7050SX=4096, 7048T=8192)
+!
+! VRRP Design:
+!   7050SX  (swplnet252) = MASTER    (priority 110)
+!   7048T   (swplnet253) = SECONDARY (priority 100)
+!   Cisco   (swplnet251) = BACKUP    (priority 90)   ← this switch
+!   VIP     = .1 on each subnet
+!
+! IP Scheme:
+!   Large subnets (/23, /24): Cisco = .251, 7050SX = .252, 7048T = .253, VIP = .1
+!   Small subnets (/26-/29):  Cisco = .2,   7050SX = .3,   7048T = .4,   VIP = .1
+!
+! Port assignments:
+!   Gi2/0/1-2 — Port-Channel3 (inter-switch trunk to 7048T swplnet253)
+!   Gi2/0/3   — Back Door (laptop access, all VLANs trunk)
+!   Gi2/0/4   — Office Net UPLink
+!   Gi2/0/17  — ESXi Infra 1GbE UPLink
+!   Gi2/0/20  — TV Wired LAN (VLAN 7 access)
+!   Gi2/0/21  — STR SAN MGMT 1G UPLink (VLAN 10 access)
+!   Gi2/0/22  — STR SAN MGMT 1G UPLink (VLAN 10 access)
+!   Gi2/0/23  — R310 ESXi Server 1G UPLink
+!   Gi2/0/25  — BKP Server 1G UPLink (T710, VLAN 10 access)
+!   Gi2/0/26  — WLAN AP UpLink
+!   Gi2/0/27  — WLAN AP UpLink
+!   Gi2/0/28  — WLAN AP UpLink
+!   Gi2/0/29-38 — ESXi Infra 1GbE UPLinks
+!   Gi2/0/39-44 — OOB Interfaces (VLAN 2 access)
+!   Gi2/0/45  — TPLink PoE UPLink (dual-homed: also on 7048T Eth45 — bpdufilter OFF, STP active)
+!   Gi2/0/46  — Meraki UPLink — GWISOLNET1 (VLAN 501 only, isolated — no VLAN 100)
+!   Gi2/0/47-50 — available
+!   Gi2/0/51-52 — Port-Channel1 (Core UPLink to Arista 7050SX)
+!
+! DHCP: Runs on this switch. Migrate to AD/Windows DHCP server in Phase 5.
+! NOTE: DHCP default-router set to .1 (VRRP VIP) on all pools
+! NOTE: Gi2/0/36 running config shows access mode with stale trunk allowed list — verify in prod
+!
+
+version 12.2
+no service pad
+service timestamps debug datetime msec
+service timestamps log datetime msec
+service password-encryption
+service unsupported-transceiver
+
+hostname swplnet251
+
+username ptchuitio privilege 15 password 7 013903101C0A0F02246F6E1B100B12465F5457
+
+no aaa new-model
+clock timezone EST -5 0
+switch 2 provision ws-c3750g-48ts
+system mtu routing 1500
+ip domain-name nnt.com
+ip name-server 209.18.47.61
+ip name-server 209.18.47.62
+ip routing
+
+ip dhcp relay information trust-all
+
+! ============================================================
+! DHCP EXCLUDED ADDRESSES
+! Scheme: VIP=.1 | Large: Cisco=.251, 7050SX=.252, 7048T=.253 | Small: Cisco=.2, 7050SX=.3, 7048T=.4
+! All .250-.254 exclusions cover 7048T (.253) for large subnets
+! All .1-.5 exclusions cover 7048T (.4) for small subnets
+! ============================================================
+
+! OOBNET (10.2.0.0/23)
+ip dhcp excluded-address 10.2.0.1 10.2.0.5
+ip dhcp excluded-address 10.2.0.250 10.2.0.254
+! INFRACORENET (10.10.0.0/23) — .1-.40 reserved for static servers + infra
+ip dhcp excluded-address 10.10.0.1 10.10.0.40
+ip dhcp excluded-address 10.10.0.250 10.10.0.254
+! SANISCSINET (10.11.0.0/23)
+ip dhcp excluded-address 10.11.0.1 10.11.0.5
+ip dhcp excluded-address 10.11.0.250 10.11.0.254
+! HOMENET (10.100.5.0/27)
+ip dhcp excluded-address 10.100.5.1 10.100.5.5
+! HOUSEHOLDNET (10.100.6.0/26)
+ip dhcp excluded-address 10.100.6.1 10.100.6.5
+! TVNET (10.100.7.0/28)
+ip dhcp excluded-address 10.100.7.1 10.100.7.5
+! PRINTNET (10.100.9.0/29)
+ip dhcp excluded-address 10.100.9.1 10.100.9.5
+! SECCAMNET (10.100.14.0/27)
+ip dhcp excluded-address 10.100.14.1 10.100.14.5
+! TESTNET (10.100.17.0/24)
+ip dhcp excluded-address 10.100.17.1 10.100.17.5
+ip dhcp excluded-address 10.100.17.250 10.100.17.254
+! COREMGMTNET (10.100.100.0/24)
+ip dhcp excluded-address 10.100.100.1 10.100.100.10
+ip dhcp excluded-address 10.100.100.26 10.100.100.28
+ip dhcp excluded-address 10.100.100.150 10.100.100.254
+! CONFMGMTNET (10.100.105.0/24)
+ip dhcp excluded-address 10.100.105.1 10.100.105.5
+ip dhcp excluded-address 10.100.105.250 10.100.105.254
+! NANONET (10.100.200.0/24)
+ip dhcp excluded-address 10.100.200.1 10.100.200.10
+ip dhcp excluded-address 10.100.200.250 10.100.200.254
+! PLATFORMNET (10.100.254.0/24)
+ip dhcp excluded-address 10.100.254.1 10.100.254.5
+ip dhcp excluded-address 10.100.254.250 10.100.254.254
+
+! ============================================================
+! DHCP POOLS (default-router = .1 = VRRP VIP)
+! ============================================================
+
+ip dhcp pool NANONET
+   network 10.100.200.0 255.255.255.0
+   default-router 10.100.200.1
+   domain-name patlabs.local
+   dns-server 10.10.0.10 10.10.0.12
+
+ip dhcp pool INFRACORENET
+   network 10.10.0.0 255.255.254.0
+   default-router 10.10.0.1
+   domain-name patlabs.local
+   dns-server 10.10.0.10 10.10.0.12
+
+ip dhcp pool TVNET
+   network 10.100.7.0 255.255.255.240
+   default-router 10.100.7.1
+   dns-server 209.18.47.61 209.18.47.62
+
+ip dhcp pool HOMENET
+   network 10.100.5.0 255.255.255.224
+   default-router 10.100.5.1
+   dns-server 209.18.47.61 209.18.47.62
+
+ip dhcp pool PRINTNET
+   network 10.100.9.0 255.255.255.248
+   default-router 10.100.9.1
+   dns-server 8.8.8.8 8.8.4.4
+
+ip dhcp pool SECCAMNET
+   network 10.100.14.0 255.255.255.224
+   default-router 10.100.14.1
+   dns-server 209.18.47.61 209.18.47.62
+
+ip dhcp pool TESTNET
+   network 10.100.17.0 255.255.255.0
+   default-router 10.100.17.1
+   dns-server 209.18.47.61 209.18.47.62
+
+ip dhcp pool COREMGMTNET
+   network 10.100.100.0 255.255.255.0
+   default-router 10.100.100.1
+   domain-name patlabs.local
+   dns-server 10.10.0.10 10.10.0.12
+
+ip dhcp pool HOUSEHOLDNET
+   network 10.100.6.0 255.255.255.192
+   default-router 10.100.6.1
+   dns-server 8.8.8.8 8.8.4.4
+   lease 2
+
+! ============================================================
+! VLANs
+! ============================================================
+
+vlan 2
+ name OOBNET
+vlan 3
+ name GUESTNET
+vlan 5
+ name HOMENET
+vlan 6
+ name HOUSEHOLDNET
+vlan 7
+ name TVNET
+vlan 9
+ name PRINTNET
+vlan 10
+ name INFRACORENET
+vlan 11
+ name SANISCSINET
+vlan 12
+ name STORVMNET
+vlan 14
+ name SECCAMNET
+vlan 17
+ name TESTNET
+vlan 100
+ name COREMGMTNET
+vlan 105
+ name CONFMGMTNET
+vlan 200
+ name NANONET
+vlan 254
+ name PLATFORMNET
+vlan 501
+ name GWISOLNET1
+
+! ============================================================
+! SPANNING TREE
+! Cisco = tertiary root (priority 32768 = default)
+! 7050SX = primary root (4096), 7048T = secondary root (8192)
+! pvst on Cisco is compatible with rapid-pvst on Aristas (RSTP backward compatible)
+! ============================================================
+
+spanning-tree mode pvst
+spanning-tree extend system-id
+spanning-tree vlan 2,3,5,6,7,9,10,11,12,14,17,100,105,200,254,501 priority 32768
+
+vlan internal allocation policy ascending
+
+! ============================================================
+! SSH
+! ============================================================
+
+ip ssh authentication-retries 5
+ip ssh source-interface Vlan100
+ip ssh version 2
+
+! ============================================================
+! PORT-CHANNELS
+! ============================================================
+
+interface Port-channel1
+ description "Core UPLink — 7050SX (Gi2/0/51-52)"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+interface Port-channel2
+ description "ESXi Infra UPLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ spanning-tree bpdufilter enable
+
+interface Port-channel3
+ description "7048T InterSwitch UPLink (Gi2/0/1-2)"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ spanning-tree portfast trunk
+
+! ============================================================
+! PHYSICAL INTERFACES
+! ============================================================
+
+interface GigabitEthernet2/0/1
+ description "7048T InterSwitch UPLink"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ channel-group 3 mode active
+ spanning-tree portfast trunk
+
+interface GigabitEthernet2/0/2
+ description "7048T InterSwitch UPLink"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ channel-group 3 mode active
+ spanning-tree portfast trunk
+
+interface GigabitEthernet2/0/3
+ description "Back Door"
+ switchport access vlan 100
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/4
+ description "Office Net UpLink"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+! GigabitEthernet2/0/5-16: available
+
+interface GigabitEthernet2/0/17
+ description "ESXi Infra 1GBE UPLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+! GigabitEthernet2/0/18-19: available
+
+interface GigabitEthernet2/0/20
+ description "TV Wired LAN"
+ switchport access vlan 7
+ switchport mode access
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ flowcontrol receive on
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/21
+ description "STR SAN MGMT 1G UPLinks"
+ switchport access vlan 10
+ switchport mode access
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ flowcontrol receive on
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/22
+ description "STR SAN MGMT 1G UPLinks"
+ switchport access vlan 10
+ switchport mode access
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ flowcontrol receive on
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/23
+ description "R310 ESXi Server 1G UPLink"
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 7,10,17,100,105,200
+ switchport mode trunk
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ flowcontrol receive on
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+! GigabitEthernet2/0/24: available
+
+interface GigabitEthernet2/0/25
+ description "BKP Server 1G UPLink (T710)"
+ switchport access vlan 10
+ switchport mode access
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ flowcontrol receive on
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/26
+ description "WLAN AP UpLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/27
+ description "WLAN AP UpLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/28
+ description "WLAN AP UpLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/29
+ description "ESXi Infra 1GBE UPLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/30
+ description "ESXi Infra 1GBE UPLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/31
+ description "ESXi Infra 1GBE UPLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/32
+ description "ESXi Infra 1GBE UPLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/33
+ description ESXi_hsplv021_MGMT_1GbE
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/34
+ description "ESXi Infra 1GBE UPLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/35
+ description "ESXi Infra 1GBE UPLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/36
+ description "Veeam_BKP_MGMT"
+ switchport mode access
+ switchport access vlan 10
+ switchport nonegotiate
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/37
+ description "ESXi Infra 1GBE UPLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/38
+ description "ESXi Infra 1GBE UPLinks"
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/39
+ description "OOB Interface"
+ switchport access vlan 2
+ switchport mode access
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ flowcontrol receive on
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/40
+ description "OOB Interface"
+ switchport access vlan 2
+ switchport mode access
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ flowcontrol receive on
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/41
+ description "OOB Interface"
+ switchport access vlan 2
+ switchport mode access
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ flowcontrol receive on
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/42
+ description "OOB Interface"
+ switchport access vlan 2
+ switchport mode access
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ flowcontrol receive on
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/43
+ description "OOB Interface"
+ switchport access vlan 2
+ switchport mode access
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ flowcontrol receive on
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/44
+ description "OOB Interface"
+ switchport access vlan 2
+ switchport mode access
+ switchport nonegotiate
+ ip dhcp relay information trusted
+ flowcontrol receive on
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/45
+ description "TPLink PoE UPLink (Cameras + APs)"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ spanning-tree portfast
+ ! NOTE: bpdufilter intentionally ABSENT — TPLink dual-homed to this switch AND 7048T Eth45
+ ! STP must run to detect the loop and block the lower-priority path (Cisco side)
+
+interface GigabitEthernet2/0/46
+ description "Meraki Backup UPLink"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 501
+ switchport trunk allowed vlan 501
+ switchport mode trunk
+ ip dhcp relay information trusted
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+! GigabitEthernet2/0/47-50: available
+
+interface GigabitEthernet2/0/51
+ description "Core UPLink — 7050SX"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ channel-group 1 mode active
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+interface GigabitEthernet2/0/52
+ description "Core UPLink — 7050SX"
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
+ switchport mode trunk
+ ip dhcp relay information trusted
+ channel-group 1 mode active
+ spanning-tree portfast trunk
+ spanning-tree bpdufilter enable
+
+! ============================================================
+! SVI INTERFACES + VRRP
+! Large subnets (/23, /24): Cisco = .251, 7050SX = .252, 7048T = .253, VIP = .1
+! Small subnets (/26-/29):  Cisco = .2,   7050SX = .3,   7048T = .4,   VIP = .1
+! ============================================================
+
+interface Vlan1
+ no ip address
+
+interface Vlan2
+ description "OOBNET"
+ ip address 10.2.0.251 255.255.254.0
+ vrrp 2 ip 10.2.0.1
+ vrrp 2 priority 90
+ vrrp 2 timers learn
+
+interface Vlan3
+ description "GUESTNET"
+ no ip address
+
+interface Vlan5
+ description "HOMENET"
+ ip address 10.100.5.2 255.255.255.224
+ vrrp 5 ip 10.100.5.1
+ vrrp 5 priority 90
+ vrrp 5 timers learn
+
+interface Vlan6
+ description "HOUSEHOLDNET"
+ ip address 10.100.6.2 255.255.255.192
+ vrrp 6 ip 10.100.6.1
+ vrrp 6 priority 90
+ vrrp 6 timers learn
+
+interface Vlan7
+ description "TVNET"
+ ip address 10.100.7.2 255.255.255.240
+ vrrp 7 ip 10.100.7.1
+ vrrp 7 priority 90
+ vrrp 7 timers learn
+
+interface Vlan9
+ description "PRINTNET"
+ ip address 10.100.9.2 255.255.255.248
+ vrrp 9 ip 10.100.9.1
+ vrrp 9 priority 90
+ vrrp 9 timers learn
+
+interface Vlan10
+ description "INFRACORENET"
+ ip address 10.10.0.251 255.255.254.0
+ vrrp 10 ip 10.10.0.1
+ vrrp 10 priority 90
+ vrrp 10 timers learn
+
+interface Vlan11
+ description "SANISCSINET"
+ ip address 10.11.0.251 255.255.254.0
+ vrrp 11 ip 10.11.0.1
+ vrrp 11 priority 90
+ vrrp 11 timers learn
+
+interface Vlan12
+ no ip address
+
+interface Vlan14
+ description "SECCAMNET"
+ ip address 10.100.14.2 255.255.255.224
+ vrrp 14 ip 10.100.14.1
+ vrrp 14 priority 90
+ vrrp 14 timers learn
+
+interface Vlan17
+ description "TESTNET"
+ ip address 10.100.17.251 255.255.255.0
+ vrrp 17 ip 10.100.17.1
+ vrrp 17 priority 90
+ vrrp 17 timers learn
+
+interface Vlan100
+ description "COREMGMTNET"
+ ip address 10.100.100.251 255.255.255.0
+ vrrp 100 ip 10.100.100.1
+ vrrp 100 priority 90
+ vrrp 100 timers learn
+
+interface Vlan105
+ description "CONFMGMTNET"
+ ip address 10.100.105.251 255.255.255.0
+ vrrp 105 ip 10.100.105.1
+ vrrp 105 priority 90
+ vrrp 105 timers learn
+
+interface Vlan200
+ description "NANONET"
+ ip address 10.100.200.251 255.255.255.0
+ vrrp 200 ip 10.100.200.1
+ vrrp 200 priority 90
+ vrrp 200 timers learn
+
+interface Vlan254
+ description "PLATFORMNET"
+ ip address 10.100.254.251 255.255.255.0
+ vrrp 254 ip 10.100.254.1
+ vrrp 254 priority 90
+ vrrp 254 timers learn
+
+interface Vlan501
+ description "GWISOLNET1"
+ ip address 10.100.201.4 255.255.255.248
+ vrrp 201 ip 10.100.201.2
+ vrrp 201 priority 90
+ vrrp 201 timers learn
+
+! ============================================================
+! ROUTING
+! ============================================================
+
+ip default-gateway 10.100.100.254
+ip classless
+ip route 0.0.0.0 0.0.0.0 10.100.100.254 253
+
+! ============================================================
+! SNMP
+! ============================================================
+
+ip access-list standard SNMP_MGMT_ACCESS
+ permit 10.10.1.52
+
+snmp-server community nntnetwatch RO SNMP_MGMT_ACCESS
+snmp-server trap-source Vlan100
+snmp-server location homelab-patchpanel-rack
+snmp-server contact homelab-admin
+
+! ============================================================
+! MANAGEMENT
+! ============================================================
+
+ip http server
+ip http secure-server
+
+line con 0
+ logging synchronous
+ login local
+line vty 0 4
+ login local
+ transport input ssh
+line vty 5 15
+ login
+
+ntp server 10.10.0.10 version 2
+ntp server 129.146.193.200
+
+end
