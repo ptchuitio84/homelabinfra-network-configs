@@ -50,6 +50,7 @@ clock timezone US/Eastern
 
 snmp-server location "Home Lab"
 snmp-server contact "Patrick Tchuitio"
+snmp-server community nntnetwatch ro
 
 ! Credentials managed separately — not enforced by this baseline
 ! Set via console or out-of-band; vault stores the runtime password for Ansible.
