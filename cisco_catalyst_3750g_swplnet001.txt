@@ -1,19 +1,19 @@
-! Cisco Catalyst 3750G — Updated Configuration
+! Cisco Catalyst 3750G - Updated Configuration
 ! Hostname: swplnet251
 ! Role: VRRP BACKUP (priority 90) + DHCP server + OOB access + AP/PoE uplinks
 ! Generated: 2026-03-28
-! Updated: 2026-04-01 — HSRP replaced with VRRP
-! Updated: 2026-04-04 — Secondary IPs removed, Core UPLink moved to Gi2/0/51-52
-! Updated: 2026-04-08 — Added Port-Channel3 (inter-switch to 7048T swplnet253)
+! Updated: 2026-04-01 - HSRP replaced with VRRP
+! Updated: 2026-04-04 - Secondary IPs removed, Core UPLink moved to Gi2/0/51-52
+! Updated: 2026-04-08 - Added Port-Channel3 (inter-switch to 7048T swplnet253)
 !                        Gi2/0/1-2 repurposed as Port-Channel3 members
-!                        Back Door moved from Gi2/0/2 → Gi2/0/3
-!                        TPLink (Gi2/0/45) bpdufilter removed — dual-homed to 7048T, STP must run
+!                        Back Door moved from Gi2/0/2 -> Gi2/0/3
+!                        TPLink (Gi2/0/45) bpdufilter removed - dual-homed to 7048T, STP must run
 !                        STP priority explicitly set to 32768 (tertiary behind 7050SX=4096, 7048T=8192)
 !
 ! VRRP Design:
 !   7050SX  (swplnet252) = MASTER    (priority 110)
 !   7048T   (swplnet253) = SECONDARY (priority 100)
-!   Cisco   (swplnet251) = BACKUP    (priority 90)   ← this switch
+!   Cisco   (swplnet251) = BACKUP    (priority 90)   <- this switch
 !   VIP     = .1 on each subnet
 !
 ! IP Scheme:
@@ -21,28 +21,28 @@
 !   Small subnets (/26-/29):  Cisco = .2,   7050SX = .3,   7048T = .4,   VIP = .1
 !
 ! Port assignments:
-!   Gi2/0/1-2 — Port-Channel3 (inter-switch trunk to 7048T swplnet253)
-!   Gi2/0/3   — Back Door (laptop access, all VLANs trunk)
-!   Gi2/0/4   — Office Net UPLink
-!   Gi2/0/17  — ESXi Infra 1GbE UPLink
-!   Gi2/0/20  — TV Wired LAN (VLAN 7 access)
-!   Gi2/0/21  — STR SAN MGMT 1G UPLink (VLAN 10 access)
-!   Gi2/0/22  — STR SAN MGMT 1G UPLink (VLAN 10 access)
-!   Gi2/0/23  — R310 ESXi Server 1G UPLink
-!   Gi2/0/25  — BKP Server 1G UPLink (T710, VLAN 10 access)
-!   Gi2/0/26  — WLAN AP UpLink
-!   Gi2/0/27  — WLAN AP UpLink
-!   Gi2/0/28  — WLAN AP UpLink
-!   Gi2/0/29-38 — ESXi Infra 1GbE UPLinks
-!   Gi2/0/39-44 — OOB Interfaces (VLAN 2 access)
-!   Gi2/0/45  — TPLink PoE UPLink (dual-homed: also on 7048T Eth45 — bpdufilter OFF, STP active)
-!   Gi2/0/46  — Meraki UPLink — GWISOLNET1 (VLAN 501 only, isolated — no VLAN 100)
-!   Gi2/0/47-50 — available
-!   Gi2/0/51-52 — Port-Channel1 (Core UPLink to Arista 7050SX)
+!   Gi2/0/1-2 - Port-Channel3 (inter-switch trunk to 7048T swplnet253)
+!   Gi2/0/3   - Back Door (laptop access, all VLANs trunk)
+!   Gi2/0/4   - Office Net UPLink
+!   Gi2/0/17  - ESXi Infra 1GbE UPLink
+!   Gi2/0/20  - TV Wired LAN (VLAN 7 access)
+!   Gi2/0/21  - STR SAN MGMT 1G UPLink (VLAN 10 access)
+!   Gi2/0/22  - STR SAN MGMT 1G UPLink (VLAN 10 access)
+!   Gi2/0/23  - R310 ESXi Server 1G UPLink
+!   Gi2/0/25  - BKP Server 1G UPLink (T710, VLAN 10 access)
+!   Gi2/0/26  - WLAN AP UpLink
+!   Gi2/0/27  - WLAN AP UpLink
+!   Gi2/0/28  - WLAN AP UpLink
+!   Gi2/0/29-38 - ESXi Infra 1GbE UPLinks
+!   Gi2/0/39-44 - OOB Interfaces (VLAN 2 access)
+!   Gi2/0/45  - TPLink PoE UPLink (dual-homed: also on 7048T Eth45 - bpdufilter OFF, STP active)
+!   Gi2/0/46  - Meraki UPLink - GWISOLNET1 (VLAN 501 only, isolated - no VLAN 100)
+!   Gi2/0/47-50 - available
+!   Gi2/0/51-52 - Port-Channel1 (Core UPLink to Arista 7050SX)
 !
 ! DHCP: Runs on this switch. Migrate to AD/Windows DHCP server in Phase 5.
 ! NOTE: DHCP default-router set to .1 (VRRP VIP) on all pools
-! NOTE: Gi2/0/36 running config shows access mode with stale trunk allowed list — verify in prod
+! NOTE: Gi2/0/36 running config shows access mode with stale trunk allowed list - verify in prod
 !
 
 version 12.2
@@ -77,7 +77,7 @@ ip dhcp relay information trust-all
 ! OOBNET (10.2.0.0/23)
 ip dhcp excluded-address 10.2.0.1 10.2.0.5
 ip dhcp excluded-address 10.2.0.250 10.2.0.254
-! INFRACORENET (10.10.0.0/23) — .1-.40 reserved for static servers + infra
+! INFRACORENET (10.10.0.0/23) - .1-.40 reserved for static servers + infra
 ip dhcp excluded-address 10.10.0.1 10.10.0.40
 ip dhcp excluded-address 10.10.0.250 10.10.0.254
 ! SANISCSINET (10.11.0.0/23)
@@ -226,7 +226,7 @@ ip ssh version 2
 ! ============================================================
 
 interface Port-channel1
- description "Core UPLink — 7050SX (Gi2/0/51-52)"
+ description "Core UPLink - 7050SX (Gi2/0/51-52)"
  switchport trunk encapsulation dot1q
  switchport trunk native vlan 100
  switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
@@ -561,7 +561,7 @@ interface GigabitEthernet2/0/45
  switchport mode trunk
  ip dhcp relay information trusted
  spanning-tree portfast
- ! NOTE: bpdufilter intentionally ABSENT — TPLink dual-homed to this switch AND 7048T Eth45
+ ! NOTE: bpdufilter intentionally ABSENT - TPLink dual-homed to this switch AND 7048T Eth45
  ! STP must run to detect the loop and block the lower-priority path (Cisco side)
 
 interface GigabitEthernet2/0/46
@@ -577,7 +577,7 @@ interface GigabitEthernet2/0/46
 ! GigabitEthernet2/0/47-50: available
 
 interface GigabitEthernet2/0/51
- description "Core UPLink — 7050SX"
+ description "Core UPLink - 7050SX"
  switchport trunk encapsulation dot1q
  switchport trunk native vlan 100
  switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
@@ -588,7 +588,7 @@ interface GigabitEthernet2/0/51
  spanning-tree bpdufilter enable
 
 interface GigabitEthernet2/0/52
- description "Core UPLink — 7050SX"
+ description "Core UPLink - 7050SX"
  switchport trunk encapsulation dot1q
  switchport trunk native vlan 100
  switchport trunk allowed vlan 2,3,5-7,9-12,14,17,100,105,200,254
