@@ -4,6 +4,7 @@
 ! Generated: 2026-03-28
 ! Updated: 2026-04-01 - HSRP replaced with VRRP
 ! Updated: 2026-04-04 - Secondary IPs removed, Core UPLink moved to Gi2/0/51-52
+! Updated: 2026-04-26 - Excluded 10.10.1.200-210 from DHCP (MetalLB LoadBalancer pool)
 ! Updated: 2026-04-08 - Added Port-Channel3 (inter-switch to 7048T swplnet253)
 !                        Gi2/0/1-2 repurposed as Port-Channel3 members
 !                        Back Door moved from Gi2/0/2 -> Gi2/0/3
@@ -80,6 +81,7 @@ ip dhcp excluded-address 10.2.0.250 10.2.0.254
 ! INFRACORENET (10.10.0.0/23) - .1-.40 reserved for static servers + infra
 ip dhcp excluded-address 10.10.0.1 10.10.0.40
 ip dhcp excluded-address 10.10.0.250 10.10.0.254
+ip dhcp excluded-address 10.10.1.200 10.10.1.210
 ! SANISCSINET (10.11.0.0/23)
 ip dhcp excluded-address 10.11.0.1 10.11.0.5
 ip dhcp excluded-address 10.11.0.250 10.11.0.254
