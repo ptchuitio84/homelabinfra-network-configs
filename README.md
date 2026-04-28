@@ -1,2 +1,148 @@
-# homelabnetwork-configs
-HomeLab baseline configuration files.
+# homelabinfra-network-configs
+
+Network device configuration files for the NNT homelab — running configs and pre-change backups for the three-switch VRRP stack. These files are both the audit trail and the recovery point. When a change is enforced via Ansible, a timestamped backup is committed here before any change is applied.
+
+---
+
+## Device Inventory
+
+| File | Device | Model | Role | Mgmt IP |
+|---|---|---|---|---|
+| `cisco_catalyst_3750g_swplnet001.txt` | swplnet251 | Cisco Catalyst 3750G | L3 VRRP Backup (priority 90) | 10.100.100.251 |
+| `arista_7050sx_swplnet252.eos` | swplnet252 | Arista 7050SX-64 | L3 VRRP Master (priority 110) | 10.100.100.252 |
+| `arista_7048t_swplnet253.eos` | swplnet253 | Arista 7048T-A | L3 VRRP Secondary (priority 100) | 10.100.100.253 |
+
+**Note on filename vs hostname:** The Cisco file is named `cisco_catalyst_3750g_swplnet001.txt` but the running config hostname is `swplnet251`. The file naming convention reflects the physical asset tag; the hostname reflects the network role.
+
+---
+
+## Architecture
+
+```
+WAN (Meraki MX64)
+    │
+    └── swplnet252 (7050SX — VRRP Master, priority 110)
+            │   \
+            │    └── swplnet253 (7048T — VRRP Secondary, priority 100)
+            │             │
+            └─────────────┴─── swplnet251 (Catalyst 3750G — VRRP Backup, priority 90)
+                                        │
+                                      DHCP Server for all VLANs
+```
+
+**L3 redundancy:** VRRP on each SVI. Virtual IP is the gateway for each VLAN. If the master fails, secondary takes over within 3 seconds. No routing change needed on hosts.
+
+**L2 redundancy:** Spanning Tree (STP) prevents loops. swplnet252 (7050SX) is STP root for all VLANs. Single path active at a time; blocked ports activate only on failure.
+
+**DHCP:** The Cisco 3750G (`swplnet251`) is the DHCP server for all subnets. All SVIs on the Arista switches relay DHCP requests to `10.100.100.251`. One DHCP server, one place to manage leases.
+
+---
+
+## VLAN Reference
+
+| VLAN | Name | Subnet | Gateway VIP | Notes |
+|---|---|---|---|---|
+| 1 | Default / OOB | 10.100.100.0/24 | 10.100.100.1 | OOB management for network gear |
+| 10 | Core / Servers | 10.10.0.0/23 | 10.10.0.1 | Primary server network |
+| 200 | SAN MGMT | — | — | Storage management (iSCSI, FC) |
+| 501+ | ESXi / Hypervisor | — | — | VMware host management |
+| (PoE) | TPLink PoE | — | — | Access layer, dual-homed to 251+253 |
+
+DHCP exclusions on swplnet251 include `10.10.1.200–10.10.1.210` (MetalLB LoadBalancer pool) and static assignments for all known servers.
+
+---
+
+## VRRP Priority Design
+
+| Switch | Priority | State | Preempt |
+|---|---|---|---|
+| swplnet252 (7050SX) | 110 | Master | Yes |
+| swplnet253 (7048T) | 100 | Secondary | Yes |
+| swplnet251 (3750G) | 90 | Backup | Yes |
+
+Preemption is enabled — if the master comes back online after a failure, it reclaims Master role automatically. The 7050SX is the highest-priority node because it has the fastest CPU and lowest forwarding latency.
+
+**IP scheme for VRRP SVIs:**
+- Large subnets (10.10.0.0/23): `.1` = VIP, `.251/.252/.253` = switch SVIs
+- Small subnets (10.100.100.0/24): `.1` = VIP, `.2/.3/.4` = switch SVIs
+
+---
+
+## Config File Format
+
+**Cisco IOS (`.txt`):**
+Standard IOS running-config format. Lines beginning with `!` are comments. Applied via `cisco.ios.ios_config src:` with `match: none` in Ansible (IOS reformats lines on write — text-match comparison doesn't work idempotently).
+
+**Arista EOS (`.eos`):**
+EOS running-config format. Applied via `arista.eos.eos_config src:` in Ansible. Syntax is similar to IOS with EOS-specific extensions.
+
+---
+
+## Backup Process
+
+Pre-enforcement backups are stored in `backups/`. Naming convention:
+
+```
+backups/<hostname>_pre-enforce_<YYYY-MM-DD>_<HHMM>.txt
+```
+
+Example: `backups/swplnet252.nnt.com_pre-enforce_2026-04-12_1430.txt`
+
+**When backups are created:**
+The Ansible enforcement pipelines (`nnt-jkn-net-enforce-swplnet251/252`) fetch the running config before applying any changes and commit it here. This gives a point-in-time snapshot of exactly what was on the device before the enforcement run.
+
+**Using a backup for rollback:**
+
+```bash
+# 1. Identify the backup
+ls backups/swplnet252*
+
+# 2. Copy to the main config file
+cp backups/swplnet252.nnt.com_pre-enforce_2026-04-12_1430.txt \
+   arista_7050sx_swplnet252.eos
+
+# 3. Commit and push
+git commit -am "rollback: restore swplnet252 to 2026-04-12 pre-enforce state"
+git push
+
+# 4. Trigger the enforcement pipeline — it will push the restored config
+```
+
+---
+
+## How Configs Are Enforced
+
+Enforcement is Ansible-driven, Jenkins-triggered:
+
+| Pipeline | Device | Playbook |
+|---|---|---|
+| `nnt-jkn-net-enforce-swplnet251` | swplnet251 (Cisco) | `enforce_baseline_swplnet251.yml` |
+| `nnt-jkn-net-enforce-swplnet252` | swplnet252 (Arista) | `enforce_baseline_swplnet252.yml` |
+
+**Pipeline flow:**
+1. Dry-run: shows what would change (no device modification)
+2. 24-hour approval gate (manual review required)
+3. Enforce: pushes config to device
+
+**Cisco note:** SSH to swplnet251 must originate from `hmvlapans001` (10.10.1.31). The Cisco 3750G runs IOS 12.2 — older KEX algorithms that modern OpenSSH on macOS refuses. The Ansible control node has legacy cipher support configured.
+
+---
+
+## Adding or Modifying a Config
+
+1. Edit the relevant config file (`*.txt` or `*.eos`)
+2. Commit and push
+3. Run the enforcement pipeline for the affected device (dry-run first)
+4. Review the dry-run diff — confirm only the intended lines changed
+5. Approve the gate and enforce
+
+For changes that affect all three switches (e.g., a new VLAN), update all three files before pushing.
+
+---
+
+## Known Issues
+
+- **Cisco 3750G EOL** — Hardware and IOS 12.2 are both end-of-life. No security patches. Replacement candidate when Arista inventory is complete.
+- **Filename vs hostname mismatch** — Cisco file is `swplnet001.txt` but device hostname is `swplnet251`. Not renaming (git history tracking); mismatch documented here.
+- **No automated config pull** — Configs are updated manually or via the enforcement pipeline. No scheduled "pull from device and commit" automation exists. Drift between device and repo is possible between enforcement runs.
+- **PoE TPLink dual-home** — STP bpdufilter is OFF on TPLink-facing ports. If STP is misconfigured, this can create a loop. Validate STP state before any trunk changes on those ports.
