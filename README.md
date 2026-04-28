@@ -19,15 +19,16 @@ Network device configuration files for the NNT homelab — running configs and p
 ## Architecture
 
 ```
-WAN (Meraki MX64)
-    │
-    └── swplnet252 (7050SX — VRRP Master, priority 110)
-            │   \
-            │    └── swplnet253 (7048T — VRRP Secondary, priority 100)
-            │             │
-            └─────────────┴─── swplnet251 (Catalyst 3750G — VRRP Backup, priority 90)
-                                        │
-                                      DHCP Server for all VLANs
+                    WAN (Meraki MX64)
+                   /        |         \
+                  /         |          \
+    swplnet251 (3750G)  swplnet252 (7050SX)  swplnet253 (7048T)
+    VRRP Backup (90)    VRRP Master (110)    VRRP Secondary (100)
+    Uplink: VLAN 501    Uplink: VLAN 502     Uplink: VLAN 503, VLAN 100
+    DHCP Server                │
+         │                     │
+         └─────────────────────┘
+              Inter-switch trunks (STP active/blocked)
 ```
 
 **L3 redundancy:** VRRP on each SVI. Virtual IP is the gateway for each VLAN. If the master fails, secondary takes over within 3 seconds. No routing change needed on hosts.
@@ -35,20 +36,6 @@ WAN (Meraki MX64)
 **L2 redundancy:** Spanning Tree (STP) prevents loops. swplnet252 (7050SX) is STP root for all VLANs. Single path active at a time; blocked ports activate only on failure.
 
 **DHCP:** The Cisco 3750G (`swplnet251`) is the DHCP server for all subnets. All SVIs on the Arista switches relay DHCP requests to `10.100.100.251`. One DHCP server, one place to manage leases.
-
----
-
-## VLAN Reference
-
-| VLAN | Name | Subnet | Gateway VIP | Notes |
-|---|---|---|---|---|
-| 1 | Default / OOB | 10.100.100.0/24 | 10.100.100.1 | OOB management for network gear |
-| 10 | Core / Servers | 10.10.0.0/23 | 10.10.0.1 | Primary server network |
-| 200 | SAN MGMT | — | — | Storage management (iSCSI, FC) |
-| 501+ | ESXi / Hypervisor | — | — | VMware host management |
-| (PoE) | TPLink PoE | — | — | Access layer, dual-homed to 251+253 |
-
-DHCP exclusions on swplnet251 include `10.10.1.200–10.10.1.210` (MetalLB LoadBalancer pool) and static assignments for all known servers.
 
 ---
 
