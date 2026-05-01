@@ -1,0 +1,396 @@
+!Current Configuration:
+!System Description "Powerconnect 8024F, 5.1.17.1, VxWorks 6.6"
+!System Software Version 5.1.17.1
+!Cut-through mode is configured as disabled
+!
+configure
+vlan 2-3,5-7,9-11,14,17,100,105,200,254,501-504
+exit
+vlan 2
+name "OOBNET"
+exit
+vlan 3
+name "GUESTNET"
+exit
+vlan 5
+name "HOMENET"
+exit
+vlan 6
+name "HOUSEHOLDNET"
+exit
+vlan 7
+name "TVNET"
+exit
+vlan 9
+name "PRINTNET"
+exit
+vlan 10
+name "INFRACORENET"
+exit
+vlan 11
+name "SANISCSINET"
+exit
+vlan 14
+name "SECCAMNET"
+exit
+vlan 17
+name "TESTNET"
+exit
+vlan 100
+name "COREMGMTNET"
+exit
+vlan 105
+name "CONFMGMTNET"
+exit
+vlan 200
+name "NANONET"
+exit
+vlan 254
+name "PLATFORMNET"
+exit
+vlan 501
+name "GWISOLNET1"
+exit
+vlan 502
+name "GWISOLNET2"
+exit
+vlan 503
+name "GWISOLNET3"
+exit
+vlan 504
+name "GWISOLNET4"
+exit
+ip telnet server disable
+snmp-server location "Home Lab"
+snmp-server contact "Patrick Tchuitio"
+hostname "swplnet005"
+sntp unicast client enable
+sntp server "pool.ntp.org"
+clock summer-time recurring USA zone "EST"
+clock timezone -5 minutes 0
+stack
+member 1 2    ! PC8024F
+exit
+ip domain-name "nnt.com"
+ip name-server "8.8.8.8"
+ip name-server "209.18.47.61"
+ip name-server "209.18.47.62"
+ip routing
+ip default-gateway 10.100.100.254
+ip route 0.0.0.0 0.0.0.0 10.100.100.254 253
+ip helper-address 10.100.100.1 dhcp
+interface vlan 2 1
+description "OOBNET"
+ip address 10.2.0.5 255.255.254.0
+bandwidth 10000
+exit
+interface vlan 3 2
+description "GUESTNET"
+! IP to be assigned
+exit
+interface vlan 5 4
+description "HOMEAPPNET"
+ip address 10.100.5.5 255.255.255.224
+bandwidth 10000
+ip mtu 9000
+exit
+interface vlan 6 5
+description "HOUSEHOLDMOBILENET"
+ip address 10.100.6.5 255.255.255.192
+bandwidth 10000
+ip mtu 9000
+exit
+interface vlan 7 6
+description "TVNET"
+ip address 10.100.7.5 255.255.255.240
+bandwidth 10000
+ip mtu 9000
+exit
+interface vlan 9 8
+description "PRINTNET"
+ip address 10.100.9.5 255.255.255.248
+bandwidth 10000
+ip mtu 9000
+exit
+interface vlan 10 9
+description "SERVERSCORENET"
+ip address 10.10.0.115 255.255.254.0
+bandwidth 10000
+ip mtu 9000
+exit
+interface vlan 11 10
+description "SANISCSINET"
+ip address 10.11.0.5 255.255.254.0
+bandwidth 10000
+ip mtu 9000
+exit
+interface vlan 17 13
+description "TESTNET"
+ip address 10.100.17.5 255.255.255.0
+bandwidth 10000
+ip mtu 9000
+exit
+interface vlan 100 15
+description "COREMGMTNET"
+ip address 10.100.100.5 255.255.255.0
+exit
+interface vlan 105 16
+description "CONFIGMGMTNET"
+ip address 10.100.105.5 255.255.255.0
+bandwidth 10000
+ip mtu 9000
+exit
+interface vlan 200 18
+description "NANOTECHNET"
+ip address 10.100.200.5 255.255.255.0
+bandwidth 10000
+ip mtu 9000
+exit
+interface vlan 254 19
+description "INFRACORENET"
+ip address 10.100.254.5 255.255.255.0
+bandwidth 10000
+ip mtu 9000
+exit
+interface vlan 501 20
+description "GWISOLNET1"
+ip address 10.200.201.2 255.255.255.252
+exit
+interface vlan 502 21
+description "GWISOLNET2"
+exit
+interface vlan 503 22
+description "GWISOLNET3"
+exit
+interface vlan 504 23
+description "GWISOLNET4"
+exit
+username "ptchuitio" password ce433e7f1f246ed9df8c2d7312e7261f privilege 15 encrypted
+ip ssh server
+ip ssh pubkey-auth
+mac address-table aging-time 301
+iscsi cos vpt 5
+dhcp l2relay
+dhcp l2relay vlan 1-3,5-7,9-11,14,17,100,105,200,254,501-504
+!
+interface Te1/0/1
+mtu 9000
+exit
+!
+interface Te1/0/2
+mtu 9000
+exit
+!
+interface Te1/0/3
+mtu 9000
+exit
+!
+interface Te1/0/4
+channel-group 2 mode active
+dhcp l2relay
+description "ESXi Infra UPLinks"
+spanning-tree portfast
+mtu 9000
+switchport mode general
+switchport general pvid 254
+switchport general allowed vlan add 2-3,5-7,9-11,14,17,100,105,200,254 tagged
+switchport general allowed vlan add 501-504 tagged
+exit
+!
+interface Te1/0/5
+channel-group 2 mode active
+dhcp l2relay
+description "ESXi Infra UPLinks"
+spanning-tree portfast
+mtu 9000
+switchport mode general
+switchport general pvid 254
+switchport general allowed vlan add 2-3,5-7,9-11,14,17,100,105,200,254 tagged
+switchport general allowed vlan add 501-504 tagged
+exit
+!
+interface Te1/0/6
+mtu 9000
+exit
+!
+interface Te1/0/7
+channel-group 4 mode active
+dhcp l2relay
+description "ESXi Infra UPLinks"
+spanning-tree portfast
+mtu 9000
+switchport mode general
+switchport general pvid 254
+switchport general allowed vlan add 2-3,5-7,9-11,14,17,100,105,200,254 tagged
+switchport general allowed vlan add 501-504 tagged
+exit
+!
+interface Te1/0/8
+channel-group 4 mode active
+dhcp l2relay
+description "ESXi Infra UPLinks"
+spanning-tree portfast
+mtu 9000
+switchport mode general
+switchport general pvid 254
+switchport general allowed vlan add 2-3,5-7,9-11,14,17,100,105,200,254 tagged
+switchport general allowed vlan add 501-504 tagged
+exit
+!
+interface Te1/0/9
+dhcp l2relay
+description "ESXi Infra UPLinks"
+spanning-tree portfast
+mtu 9000
+switchport mode general
+switchport general pvid 254
+switchport general allowed vlan add 2-3,5-7,9-11,14,17,100,105,200,254 tagged
+switchport general allowed vlan add 501-504 tagged
+exit
+!
+interface Te1/0/10
+dhcp l2relay
+description "ESXi Infra UPLinks"
+spanning-tree portfast
+mtu 9000
+switchport mode general
+switchport general pvid 254
+switchport general allowed vlan add 2-3,5-7,9-11,14,17,100,105,200,254 tagged
+switchport general allowed vlan add 501-504 tagged
+exit
+!
+interface Te1/0/11
+mtu 9000
+exit
+!
+interface Te1/0/12
+mtu 9000
+exit
+!
+interface Te1/0/13
+mtu 9000
+exit
+!
+interface Te1/0/14
+mtu 9000
+exit
+!
+interface Te1/0/17
+channel-group 5 mode active
+dhcp l2relay
+description "Plex Server UPLinks"
+spanning-tree portfast
+mtu 9000
+switchport mode general
+switchport general pvid 7
+switchport general allowed vlan add 7
+exit
+!
+interface Te1/0/18
+channel-group 5 mode active
+dhcp l2relay
+description "Plex Server UPLinks"
+spanning-tree portfast
+mtu 9000
+switchport mode general
+switchport general pvid 7
+switchport general allowed vlan add 7
+exit
+!
+interface Te1/0/19
+mtu 9000
+exit
+!
+interface Te1/0/20
+mtu 9000
+exit
+!
+interface Te1/0/21
+mtu 9000
+exit
+!
+interface Te1/0/22
+description "Internet GTW UpLink"
+spanning-tree portfast
+mtu 9000
+switchport mode general
+switchport general pvid 501
+switchport general allowed vlan add 2-3,5-7,9-11,14,17,100,105,200,254 tagged
+switchport general allowed vlan add 501-504 tagged
+exit
+!
+interface Te1/0/23
+channel-group 1 mode active
+dhcp l2relay
+description "Core UPLink"
+spanning-tree portfast
+mtu 9000
+switchport mode general
+switchport general pvid 100
+switchport general allowed vlan add 2-3,5-7,9-11,14,17,100,105,200,254 tagged
+switchport general allowed vlan add 501-504 tagged
+exit
+!
+interface Te1/0/24
+channel-group 1 mode active
+dhcp l2relay
+description "Core UPLink"
+spanning-tree portfast
+mtu 9000
+switchport mode general
+switchport general pvid 100
+switchport general allowed vlan add 2-3,5-7,9-11,14,17,100,105,200,254 tagged
+switchport general allowed vlan add 501-504 tagged
+exit
+!
+interface port-channel 1
+ip dhcp snooping trust
+dhcp l2relay
+ip dhcp snooping limit none
+description "Core UPLink"
+hashing-mode 6
+spanning-tree portfast
+switchport mode general
+switchport general pvid 100
+switchport general allowed vlan add 2-3,5-7,9-11,14,17,100,105,200,254 tagged
+switchport general allowed vlan add 501-504 tagged
+mtu 9000
+exit
+!
+interface port-channel 2
+dhcp l2relay
+description "ESXi Infra UPLinks"
+hashing-mode 6
+switchport mode general
+switchport general pvid 254
+switchport general allowed vlan add 2-3,5-7,9-11,14,17,100,105,200,254 tagged
+switchport general allowed vlan add 501-504 tagged
+mtu 9000
+exit
+!
+interface port-channel 4
+dhcp l2relay
+description "ESXi Infra UPLinks"
+hashing-mode 6
+switchport mode general
+switchport general pvid 254
+switchport general allowed vlan add 2-3,5-7,9-11,14,17,100,105,200,254 tagged
+switchport general allowed vlan add 501-504 tagged
+mtu 9000
+exit
+!
+interface port-channel 5
+ip dhcp snooping trust
+dhcp l2relay
+ip dhcp snooping limit none
+description "Plex Server UPLinks"
+hashing-mode 6
+spanning-tree portfast
+switchport mode general
+switchport general pvid 7
+switchport general allowed vlan add 7
+mtu 9000
+exit
+snmp-server engineid local 800002a2035c260ad39046
+enable password ce433e7f1f246ed9df8c2d7312e7261f encrypted
+exit
