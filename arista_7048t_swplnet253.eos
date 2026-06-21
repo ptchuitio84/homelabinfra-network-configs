@@ -64,6 +64,8 @@ snmp-server community nntnetwatch ro
 management ssh
    no shutdown
 
+environment fan-speed override 30
+
 ! ============================================================
 ! VLANs
 ! ============================================================
