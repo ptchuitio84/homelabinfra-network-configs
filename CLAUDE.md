@@ -14,6 +14,14 @@ Network device configuration files for the NNT homelab switch stack.
 - Org ID: **1679044** (numeric API ID — NOT the URL slug LiZFhb)
 - Always query `/api/v1/organizations` to get numeric ID — never use URL slug
 
+## Coding Standards (Mandatory)
+Global coding principles apply — see `~/.claude/CLAUDE.md`.
+
+**Success criteria for this repo (Goal-Driven Execution):**
+- Config changes: `show run | section <feature>` on device matches intent after push
+- Ansible network plays: second run shows "changed=0" (use `match: none` for ios_config)
+- Baseline enforcement: pipeline shows all switches compliant before declaring done
+
 ## Key Gotchas
 - **Cisco SSH:** Must run from ans001 (hmvlapans001, 10.10.1.31). Mac OpenSSH is too new for IOS 12.2 KEX algorithms.
 - **ios_config idempotency:** Use `match: none`. IOS reformats config lines on write — text comparison always shows drift even with no real changes.
