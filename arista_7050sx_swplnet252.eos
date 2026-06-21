@@ -58,6 +58,8 @@ snmp-server community nntnetwatch ro
 management ssh
    no shutdown
 
+environment fan-speed override 30
+
 ! Arista-branded DACs — no unlock key needed
 ! If using 3rd party optics, add: service unsupported-transceiver LabUse <key>
 
